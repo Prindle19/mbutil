@@ -340,8 +340,8 @@ def mbtiles_to_disk_gme(mbtiles_file, directory_path, **kwargs):
         f.write(t[3])
         f.close()
         done = done + 1
-        #for c in msg: sys.stdout.write(chr(8))
-        #logger.info('%s / %s tiles exported' % (done, count))
+        for c in msg: sys.stdout.write(chr(8))
+        logger.info('%s / %s tiles exported' % (done, count))
         t = tiles.fetchone()
     e.write("</assetlist>")
     e.close()      

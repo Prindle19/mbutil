@@ -7,11 +7,13 @@ Before exporting tiles to disk, see if there's a [MapBox Hosting plan](http://ma
 or an open source [MBTiles server implementation](https://github.com/mapbox/mbtiles-spec/wiki/Implementations)
 that works for you - tiles on disk are notoriously difficult to manage.
 
+The new Google Maps Engine Options should make it easy to manage tiles on Google Maps Engine, and this utility will generate a .ebm file automatically which will create all the assets and mosaics you need automatically, including the spatial extents and projection information in a spatial metadata file for each tile.
+
 ## Installation
 
 Git checkout (requires git)
 
-    git clone git://github.com/mapbox/mbutil.git
+    git clone git://github.com/Prindle19/mbutil.git
     cd mbutil
     ./mb-util -h
 
@@ -30,6 +32,11 @@ Python installation (requires easy_install)
 Export an `mbtiles` file to files on the filesystem:
 
     mb-util World_Light.mbtiles adirectory
+
+Export an `mbtiles` file to files on the filesystem, and generate a Google Maps Engine .ebm file and spatial sidecar files for use on Google Maps Engine:
+
+    mb-util --scheme=tms --gme=true --acquisitionDate=2012:10:22 --attribution=OSM --tags="osm, tilemill, osm bright" /gevol/mbtilesexport/OSMBright_Level9.mbtiles /gevol/mbtilesexport
+
 
 Import a directory into a `mbtiles` file
 
@@ -66,8 +73,12 @@ and run
 
 BSD - see LICENSE.md
 
-## Authors
+## Orriginal Authors
 
 - Tom MacWright (tmcw)
 - Dane Springmeyer (springmeyer)
 - Mathieu Leplatre (leplatrem)
+
+## GME Components Added By
+
+- Sean Wohltman (Prindle19)
