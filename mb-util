@@ -9,7 +9,7 @@
 import logging, os, sys
 from optparse import OptionParser
 
-from mbutil import mbtiles_to_disk, disk_to_mbtiles
+from mbutil import mbtiles_to_disk, disk_to_mbtiles, mbtiles_to_disk_gme
 
 if __name__ == '__main__':
 
@@ -32,6 +32,26 @@ if __name__ == '__main__':
         type='string',
         default='xyz')
 
+    parser.add_option('--gme', dest='gme',
+        help='''Should MBUtil generate Sidecars and a .ebm file so tiles can be loaded to Google Maps Engine? Default is "false". Type "true" if you want to do this.''',
+        type='string',
+        default='false')
+
+    parser.add_option('--acquisitionDate', dest='acquisitionDate',
+        help='''If ---gme=true, what is the acquisitionDate for the tile set? Ex: 1982:03:13 or 2002:02:16-2012:04:23 format''',
+        type='string',
+        default='')
+
+    parser.add_option('--attribution', dest='attribution',
+        help='''If --gme=true, what is the Attribution Provider for the tile set? Ex: OSM or USDA FSA NAIP''',
+        type='string',
+        default='')
+
+    parser.add_option('--tags', dest='tags',
+        help='''If --gme=true, what are the Tags for the tile set? Ex: roads,osm,buildings or imagery,naip,Virginia''',
+        type='string',
+        default='')
+
     (options, args) = parser.parse_args()
 
     # Transfer operations
@@ -45,8 +65,12 @@ if __name__ == '__main__':
     
     # to disk
     if os.path.isfile(args[0]) and not os.path.exists(args[1]):
-        mbtiles_file, directory_path = args
-        mbtiles_to_disk(mbtiles_file, directory_path, **options.__dict__)
+        if options.gme == 'true':
+            mbtiles_file, directory_path = args
+            mbtiles_to_disk_gme(mbtiles_file, directory_path, **options.__dict__)    
+        else :
+            mbtiles_file, directory_path = args
+            mbtiles_to_disk(mbtiles_file, directory_path, **options.__dict__)
     
     if os.path.isdir(args[0]) and os.path.isfile(args[1]):
         sys.stderr.write('Importing tiles into already-existing MBTiles is not yet supported\n')

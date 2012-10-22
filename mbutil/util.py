@@ -7,8 +7,11 @@
 # Licensed under BSD
 
 import sqlite3, uuid, sys, logging, time, os, json, zlib
+import globalmaptiles
 
 logger = logging.getLogger(__name__)
+
+srs = 'PROJCS["Popular Visualisation CRS / Mercator",GEOGCS["Popular Visualisation CRS",DATUM["Popular_Visualisation_Datum",SPHEROID["Popular Visualisation Sphere",6378137,0,AUTHORITY["EPSG","7059"]],TOWGS84[0,0,0,0,0,0,0],AUTHORITY["EPSG","6055"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4055"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Mercator_1SP"],PARAMETER["central_meridian",0],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_northing",0],AUTHORITY["EPSG","3785"],AXIS["X",EAST],AXIS["Y",NORTH]]'
 
 def flip_y(zoom, y):
     return (2**zoom-1) - y
@@ -258,3 +261,87 @@ def mbtiles_to_disk(mbtiles_file, directory_path, **kwargs):
         for c in msg: sys.stdout.write(chr(8))
         logger.info('%s / %s grids exported' % (done, count))
         g = grids.fetchone()
+
+def mbtiles_to_disk_gme(mbtiles_file, directory_path, **kwargs):
+    logger.debug("Exporting MBTiles to disk with GME Options")
+    logger.debug("%s --> %s" % (mbtiles_file, directory_path))
+    con = mbtiles_connect(mbtiles_file)
+    os.mkdir("%s" % directory_path)
+    metadata = dict(con.execute('select name, value from metadata;').fetchall())
+    json.dump(metadata, open(os.path.join(directory_path, 'metadata.json'), 'w'), indent=4)
+    count = con.execute('select count(zoom_level) from tiles;').fetchone()[0]
+    done = 0
+    msg = ''
+    service_version = metadata.get('version', '1.0.0')
+    base_path = directory_path
+    if not os.path.isdir(base_path):
+        os.makedirs(base_path)
+
+    # if interactivity
+    formatter = metadata.get('formatter')
+    if formatter:
+        layer_json = os.path.join(base_path,'layer.json')
+        formatter_json = {"formatter":formatter}
+        open(layer_json,'w').write('grid(' + json.dumps(formatter_json) + ')')
+    #create an .ebm file for the entire .mbtiles collection, making mosaics for each level of tiles
+    base = os.path.basename(mbtiles_file)
+    basename = base.split('.')[0]
+    ebm = os.path.join(base_path, '%s.%s' % (basename, 'ebm'))
+    e = open(ebm, 'w')
+    e.write("<assetlist>\n")
+    tiles = con.execute('select zoom_level, tile_column, tile_row, tile_data from tiles;')
+    t = tiles.fetchone()
+    while t:
+        z = t[0]
+        x = t[1]
+        y = t[2]
+        if kwargs.get('scheme') == 'xyz':
+          y = flip_y(z,y)
+          print 'flipping'
+        tile = os.path.join(base_path,'%s-%s-%s.%s' % (z,x,y,metadata.get('format', 'png')))
+        # use the Global Map Tiles Library To Calculate the Spatial Bounds of the Tile in 900913 Projection
+        #return ( minx, miny, maxx, maxy )
+        tile_extent = globalmaptiles.GlobalMercator.TileBounds(globalmaptiles.GlobalMercator(),x,y,z)
+        # now find the values needed for the .aux.xml World File
+        x_change = tile_extent[2] - tile_extent[0]
+        y_change = tile_extent[1] - tile_extent[3]
+        x_pix_size = x_change / 256
+        y_pix_size = y_change / 256
+        #print "x change: " + str(x_change)
+        #print "y change: " + str(y_change)
+        aux_file = os.path.join(base_path, '%s-%s-%s.%s.%s' % (z,x,y,metadata.get('format', 'png'),'aux.xml'))
+        a = open(aux_file, 'w')
+        a.write("<PAMDataset>\n")
+        a.write('  <SRS>' + srs + '</SRS>\n')
+        a.write("  <GeoTransform>" + str(tile_extent[0]) + "," + str(x_pix_size) + "," + "0," + str(tile_extent[3]) + "," + "0," + str(y_pix_size) + "</GeoTransform>\n")
+        a.write("</PAMDataset>")
+        a.close()
+        #write asset and sidecar to .ebm file
+        ebm_filename = '%s-%s-%s.%s' % (z,x,y,metadata.get('format', 'png'))
+        ebm_auxfilename = '%s-%s-%s.%s.%s' % (z,x,y,metadata.get('format', 'png'),'aux.xml')
+        ebm_name = '%s-%s-%s-%s' % (basename,z,x,y)
+        mosaic_name = '%s-%s-%s' % (basename,z,'Mosaic')
+        acquisitionDate = kwargs.get('acquisitionDate')
+        attribution = kwargs.get('attribution')
+        tags = kwargs.get('tags')
+        e.write("  <asset>\n")
+        e.write("    <type>image</type>\n")
+        e.write("    <filename>" + ebm_filename + "</type>\n")
+        e.write("    <name>" + ebm_name + "</name>\n")
+        e.write("    <sidecars>\n")
+        e.write("      <sidecar>" + ebm_auxfilename + "</sidecar>\n")
+        e.write("    </sidecars>\n")
+        e.write("    <aquisitionDate>" + acquisitionDate + "</acquisitionDate>\n")
+        e.write("    <attribution>" + attribution + "</attribution>\n")
+        e.write("    <mosaicName>" + mosaic_name + "</mosaicName>\n")
+        e.write("    <tags>" + tags + "</tags>\n")
+        e.write("  </asset>\n") 
+        f = open(tile, 'wb')
+        f.write(t[3])
+        f.close()
+        done = done + 1
+        #for c in msg: sys.stdout.write(chr(8))
+        #logger.info('%s / %s tiles exported' % (done, count))
+        t = tiles.fetchone()
+    e.write("</assetlist>")
+    e.close()      
